@@ -49,9 +49,9 @@ type Tab = keyof typeof CODE;
 const TABS: [Tab, string][] = [['rust', 'Rust'], ['browser', 'Browser'], ['cli', 'Quickstart'], ['android', 'Android']];
 
 const TARGETS = [
-  ['Hardware wallets', 'Ship the models with firmware and scan on the device. Tested in a Penlock app on the Passport Prime simulator.'],
-  ['Mobile wallets', 'Replace typing 12 words with one photo and a review step. Start from the Android example.'],
-  ['Penlock tools', 'Read paper shares back without retyping 72 symbols, then recombine any 2 of 3.'],
+  ['Hardware wallets', 'The models ship with the firmware and the scan happens on the device. A Penlock app has run it on the Passport Prime simulator.'],
+  ['Mobile wallets', 'The user takes one photo and checks the result instead of typing 12 words. There’s an Android example to start from.'],
+  ['Penlock tools', 'Read a paper share back without typing 72 symbols by hand, then combine any 2 of the 3 shares.'],
 ];
 
 export default function Integrate() {
@@ -66,8 +66,8 @@ export default function Integrate() {
     <section id="integrate" className="sec" aria-labelledby="int-h">
       <p className="kicker">04 · Integrate</p>
       <div className="sec-head">
-        <h2 id="int-h" className="h2">A Rust library. One call per photo.</h2>
-        <p>Build a Scanner once, then scan each image. You get every word’s box, crop, raw text and probabilities, plus the checksum result.</p>
+        <h2 id="int-h" className="h2">Using the library</h2>
+        <p>Create a Scanner once and call scan for each photo. For every word you get where it is in the photo, a cropped image of it, the text that was read and the ranked seed words it could be. You also get whether the checksum passed.</p>
       </div>
       <div className="int">
         <div className="int-code">

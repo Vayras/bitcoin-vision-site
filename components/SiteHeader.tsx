@@ -38,6 +38,8 @@ function ThemeToggle() {
   );
 }
 
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 const LINKS = [['/#demo', 'Demo'], ['/#model', 'Model'], ['/#integrate', 'Integrate'], ['/docs/', 'Docs']];
 
 export default function SiteHeader() {
@@ -48,12 +50,9 @@ export default function SiteHeader() {
     <header className="site-header">
       <nav className="nav" aria-label="Main">
         <Link href="/" className="brand">
-          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5" />
-            <path d="M8 9h8M8 12h6M8 15h7" />
-          </svg>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static export, no image optimisation */}
+          <img src={`${BASE}/logo.jpg`} alt="" width={28} height={28} className="brand-logo" />
           bitcoin-vision
-          <span className="brand-tag">v0</span>
         </Link>
         {LINKS.map(([href, label]) => <Link key={href} href={href} className="nav-link nav-links">{label}</Link>)}
         <a href={GITHUB} className="btn-sm btn-sm--line nav-links">GitHub ↗</a>

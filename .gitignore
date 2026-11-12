@@ -15,3 +15,6 @@ public/vision/models/
 # upload worker
 upload-worker/node_modules/
 upload-worker/.wrangler/
+
+# local review artifacts (browser profiles, screenshots)
+.review/

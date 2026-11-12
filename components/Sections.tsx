@@ -2,13 +2,12 @@ import Link from 'next/link';
 import { GITHUB, INTEGRATION_GUIDE, PENLOCK } from '@/lib/links';
 
 const SPECS: [string, string][] = [
-  ['Size', '24.7 MB'],
+  ['BIP39 models', '24.7 MB'],
+  ['Penlock model', '1.6 MB'],
   ['Network', 'None'],
   ['Reads', 'BIP39 words · Penlock shares'],
-  ['Scores', '2048 words · 29 symbols'],
   ['Library', 'Rust'],
-  ['License', 'MIT or Apache-2.0'],
-  ['Tested on', 'Passport Prime simulator'],
+  ['License', 'MIT / Apache-2.0'],
 ];
 
 export function Hero() {
@@ -17,12 +16,13 @@ export function Hero() {
       <div className="hero-copy">
         <p className="kicker">[ Open source · On-device vision model ]</p>
         <h1 className="h1">
-          Reads handwritten seed backups.<br />
-          <span style={{ color: 'var(--dim)' }}>Never leaves the device.</span>
+          Scan a handwritten seed backup<br />
+          <span style={{ color: 'var(--dim)' }}>without it leaving the device.</span>
         </h1>
         <p className="lead">
-          bitcoin-vision is a small set of vision models and a Rust library. It turns a photo of a BIP39 recovery phrase
-          or a Penlock share into words you can check, with a confidence score for every one.
+          bitcoin-vision is a Rust library with a few small vision models. Give it a photo of a BIP39 recovery phrase or
+          a Penlock share, and it tells you what it read, how sure it is about each word, and what else each word
+          might be.
         </p>
         <div className="hero-ctas">
           <a href="#demo" className="btn btn--ink">Try the demo</a>
@@ -38,40 +38,46 @@ export function Hero() {
   );
 }
 
+// Sizes are the .onnx files in the upstream repo, in decimal MB.
 const MODELS = [
-  ['word-detector.onnx', 'BIP39', 'Finds each handwritten word on the page', 'A box per word'],
-  ['text-recogniser.onnx', 'BIP39', 'Reads the letters in each word, with its dictionary', 'Raw text, e.g. “absert”'],
-  ['word-reference.onnx', 'BIP39', 'Scores each crop against all 2048 seed words, then calibrates', 'Probabilities over 2048 words'],
-  ['cell-reference.onnx', 'Penlock', 'Classifies each of the 72 cells on a share strip', 'Probabilities over 29 symbols'],
+  ['word-detector.onnx', 'BIP39', 'Finds where each word is written on the page', 'A box around each word', '4.7 MB'],
+  ['text-recogniser.onnx', 'BIP39', 'Reads the letters as written, even when they don’t spell a seed word', 'The text it saw, e.g. “absert”', '7.7 MB'],
+  ['word-reference.onnx', 'BIP39', 'Compares each word with all 2048 seed words', 'Each seed word’s chance of being the right one', '12.3 MB'],
+  ['cell-reference.onnx', 'Penlock', 'Reads each of the 72 handwritten symbols on a share', 'Each of the 29 symbols’ chance of being the right one', '1.6 MB'],
 ];
 
 export function ModelCard() {
   return (
     <section id="model" className="sec" aria-labelledby="model-h">
-      <p className="kicker">02 · Model card</p>
+      <p className="kicker">02 · Models</p>
       <div className="sec-head">
-        <h2 id="model-h" className="h2">Four small models. One job each.</h2>
-        <p>No general-purpose AI, no cloud. Each model does one narrow step, and every step’s output is kept so you can show the user why a word was chosen.</p>
+        <h2 id="model-h" className="h2">The models and what they do</h2>
+        <p>
+          These are small models trained for this task, not a general-purpose AI, and they run on the device. Reading a
+          BIP39 phrase uses the first three. Reading a Penlock share only needs the last one.
+        </p>
       </div>
       <div role="table" aria-label="Models" className="card mtable">
         <div role="row" className="mrow is-head">
-          <span role="columnheader">Model file</span><span role="columnheader">Pipeline</span>
-          <span role="columnheader">Job</span><span role="columnheader">Output</span>
+          <span role="columnheader">Model file</span><span role="columnheader">Used for</span>
+          <span role="columnheader">What it does</span><span role="columnheader">What it returns</span>
+          <span role="columnheader">Size</span>
         </div>
-        {MODELS.map(([file, pipe, job, out]) => (
+        {MODELS.map(([file, pipe, job, out, size]) => (
           <div role="row" className="mrow" key={file}>
             <span role="cell" className="m-file">{file}</span>
             <span role="cell"><span className="m-pipe">{pipe}</span></span>
             <span role="cell" className="m-job">{job}</span>
             <span role="cell">{out}</span>
+            <span role="cell" className="m-size">{size}</span>
           </div>
         ))}
       </div>
       <div className="stats">
-        <div className="stat"><b>24.7 <small>MB</small></b><p>All models together, bundled with the crate</p></div>
-        <div className="stat"><b>0</b><p>Network calls. No logs, no uploads</p></div>
-        <div className="stat"><b>2048</b><p>BIP39 words scored for every handwritten word</p></div>
-        <div className="stat"><b>29</b><p>Penlock symbols scored for every one of 72 cells</p></div>
+        <div className="stat"><b>24.7 <small>MB</small></b><p>of models to read a BIP39 phrase</p></div>
+        <div className="stat"><b>1.6 <small>MB</small></b><p>of models to read a Penlock share</p></div>
+        <div className="stat"><b>0</b><p>network requests while scanning</p></div>
+        <div className="stat"><b>2048</b><p>seed words each handwritten word is compared with</p></div>
       </div>
     </section>
   );
@@ -82,22 +88,22 @@ const PIPES: { tag: string; title: string; steps: [string, string][] }[] = [
     tag: 'PIPELINE A · BIP39',
     title: 'Recovery phrase',
     steps: [
-      ['Find.', 'Straighten the page and box every word.'],
-      ['Read.', 'Read each word letter by letter.'],
-      ['Match.', 'Score the crop against all 2048 seed words.'],
-      ['Check.', 'Test the phrase checksum.'],
-      ['You confirm.', 'Pick any unsure word, then Reveal or Forget.'],
+      ['Find the words.', 'The page is straightened and each word gets a box drawn around it.'],
+      ['Read the letters.', 'The recogniser reads what was actually written, spelling mistakes included.'],
+      ['Match against the wordlist.', 'Each word is compared with all 2048 BIP39 words.'],
+      ['Check the checksum.', 'The last word of a phrase carries a checksum, which catches most misreads.'],
+      ['Ask the user.', 'Words the scanner isn’t sure about are shown to the user with the closest alternatives.'],
     ],
   },
   {
     tag: 'PIPELINE B · PENLOCK',
     title: 'Penlock share',
     steps: [
-      ['Find.', 'Locate the strip and cut out its 72 cells.'],
-      ['Read.', 'Score each cell against 29 symbols.'],
-      ['Check.', 'Run each row’s built-in error check.'],
-      ['Combine.', 'Any 2 of 3 shares rebuild the 12 words.'],
-      ['You confirm.', 'Fix any smudged symbol, then Reveal or Forget.'],
+      ['Find the share.', 'The share is located in the photo and split into its 72 boxes.'],
+      ['Read the symbols.', 'Each box is compared with the 29 symbols Penlock uses.'],
+      ['Check each row.', 'Every row has its own error check, so most misreads are caught here.'],
+      ['Combine shares.', 'Any 2 of the 3 shares are enough to rebuild the 12 words.'],
+      ['Ask the user.', 'If a symbol is smudged, the user can correct it by hand.'],
     ],
   },
 ];
@@ -106,7 +112,7 @@ export function HowItReads() {
   return (
     <section className="sec" aria-labelledby="how-h">
       <p className="kicker">03 · How it reads</p>
-      <h2 id="how-h" className="h2" style={{ marginBottom: 28 }}>Two pipelines. Both end with you.</h2>
+      <h2 id="how-h" className="h2" style={{ marginBottom: 28 }}>From photo to words</h2>
       <div className="two">
         {PIPES.map((p) => (
           <article key={p.tag} className="card pipe">
@@ -132,16 +138,17 @@ export function Hardware() {
     <section id="hardware" className="sec hw" aria-labelledby="hw-h">
       <div className="hw-copy">
         <p className="kicker">05 · In a hardware wallet</p>
-        <h2 id="hw-h" className="h2">Tested on the Passport Prime simulator.</h2>
+        <h2 id="hw-h" className="h2">Tested on the Passport Prime simulator</h2>
         <p className="lead">
-          A Penlock app for Passport Prime, built at a hackathon, uses bitcoin-vision to read shares. So far it has run on
-          the Passport Prime simulator, not yet on a real device. Small models and zero network access are what make it a fit.
+          A Penlock app for Passport Prime, built at a hackathon, uses bitcoin-vision to read shares. It has only run on
+          the Passport Prime simulator so far, not on a real device. Reading Penlock shares needs just the 1.6 MB
+          model, and the library never touches the network, so it fits well on a signing device.
         </p>
         <div className="facts">
-          <div><p>STORAGE</p><p>About 24.7 MB of models</p></div>
-          <div><p>NETWORK</p><p>None, ever</p></div>
-          <div><p>UPDATES</p><p>Signed, through firmware</p></div>
-          <div><p>UX</p><p>Review, reveal, forget</p></div>
+          <div><p>STORAGE</p><p>1.6 MB for Penlock, 24.7 MB for BIP39</p></div>
+          <div><p>NETWORK</p><p>Not used</p></div>
+          <div><p>UPDATES</p><p>Shipped in signed firmware</p></div>
+          <div><p>UX</p><p>User checks the result before revealing it</p></div>
         </div>
       </div>
       <div className="hw-art" aria-hidden="true">
@@ -163,24 +170,24 @@ export function Limits() {
   return (
     <section className="sec" aria-labelledby="lim-h">
       <p className="kicker">06 · Limits</p>
-      <h2 id="lim-h" className="h2" style={{ marginBottom: 28 }}>An honest prototype.</h2>
+      <h2 id="lim-h" className="h2" style={{ marginBottom: 28 }}>It’s still a prototype</h2>
       <div className="two">
         <div className="card limit">
           <p className="kicker" style={{ letterSpacing: 0, marginBottom: 12 }}>WHAT IT CAN’T DO YET</p>
           <ul>
-            <li>English seed words only</li>
-            <li>Faint writing, low contrast and odd layouts cause misreads</li>
-            <li>About 1 in 16 wrong 12-word phrases still pass the checksum</li>
-            <li>Not published to crates.io yet</li>
+            <li>It only reads English seed words</li>
+            <li>Faint writing, low-contrast photos and unusual page layouts lead to misreads</li>
+            <li>About 1 in 16 wrong 12-word phrases still passes the checksum</li>
+            <li>It isn’t published on crates.io yet</li>
           </ul>
         </div>
         <div className="card limit">
           <p className="kicker" style={{ letterSpacing: 0, marginBottom: 12 }}>WHAT INTEGRATORS MUST DO</p>
           <ul>
-            <li>Ask the user to confirm every unsure word</li>
-            <li>Keep photos, crops and results in memory only</li>
-            <li>Hide words until Reveal; wipe them on Forget</li>
-            <li>Tell Penlock users to store shares apart</li>
+            <li>Ask the user to confirm every word the scanner isn’t sure about</li>
+            <li>Keep photos and results in memory, never on disk</li>
+            <li>Keep the words hidden until the user taps Reveal, and wipe them on Forget</li>
+            <li>Remind Penlock users to keep their shares in separate places</li>
           </ul>
         </div>
       </div>
@@ -192,7 +199,7 @@ export function SiteFooter() {
   return (
     <footer className="footer">
       <b>bitcoin-vision</b>
-      <span>MIT or Apache-2.0</span>
+      <span>MIT / Apache-2.0</span>
       <a href={GITHUB}>GitHub ↗</a>
       <a href={PENLOCK}>Penlock ↗</a>
       <Link href={INTEGRATION_GUIDE}>Integration guide</Link>
