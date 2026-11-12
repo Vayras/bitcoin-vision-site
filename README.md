@@ -31,11 +31,11 @@ The base path (`/<repo>/`) is set automatically.
 | --- | --- |
 | `scripts/build-vision.sh` | Fetches penlock-io/bitcoin-vision at a pinned commit into `wasm/upstream/`, applies `wasm/patches/`, compiles `wasm/` to WebAssembly, copies the ONNX models to `public/vision/models/` |
 | `wasm/patches/0001-web-time-instant.patch` | The one upstream change: `std::time::Instant` panics in browser WebAssembly, so the OCR model build uses `web-time` |
-| `wasm/src/lib.rs` | The JS-facing API: `WordScanner`, `ShareScanner`, `recoverShares`, `checksumPasses`, `listWords` |
+| `wasm/src/lib.rs` | The JS-facing API: `WordScanner` (`scan`, and `crop` for a word’s picture), `ShareScanner`, `recoverShares`, `checksumPasses`, `listWords` |
 | `public/vision/worker.js` | Web Worker that loads the model (cached in Cache Storage after the first visit) and scans off the main thread |
 | `lib/vision/client.ts` | Promise API the React app uses: `scanWords`, `scanShares`, `recoverShares`, `checksumPasses` |
 | `content/integration-guide.md` | The integration guide, served at `/docs/` (edit the Markdown; the page rebuilds from it) |
-| `components/playground/` | The Playground: the scripted sample on Run, the real model on “Use your own practice photo” |
+| `components/playground/` | The Playground: the real model on the sample photos in `public/samples/` (Run sample) and on “Use your own practice photo” |
 
 ## Opt-in training samples
 
@@ -48,8 +48,9 @@ appears when `NEXT_PUBLIC_SAMPLE_UPLOAD_URL` is set (the `SAMPLE_UPLOAD_URL` rep
 The page design is the “Model site” board (light and dark). Colours are tokens at the top of
 `app/globals.css`; light is the default; the header toggle switches to dark (saved per browser).
 
-To move to a newer upstream commit, change `UPSTREAM_REV` in `scripts/build-vision.sh`, re-run it, and bump
-`CACHE` in `public/vision/worker.js` so returning visitors fetch the new model.
+To move to a newer upstream commit, change `UPSTREAM_REV` in `scripts/build-vision.sh` and re-run it. The
+script writes a build id beside the `.wasm`; the page loads the worker, the JS glue and the browser cache
+under that id, so returning visitors get the new build with nothing to bump by hand.
 
 Sizes: ~21 MB `.wasm` (~5.5 MB gzipped) + ~25 MB models, downloaded only when someone scans.
 A 16 MP photo reads in about 3–8 s, single-threaded.

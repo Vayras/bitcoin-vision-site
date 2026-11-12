@@ -15,13 +15,28 @@ type Pending = {
   onProgress?: (p: ScanPhase) => void;
 };
 
-let worker: Worker | null = null;
+let worker: Promise<Worker> | null = null;
 let seq = 0;
 const pending = new Map<number, Pending>();
 
-function getWorker(): Worker {
-  if (worker) return worker;
-  worker = new Worker(`${BASE}/vision/worker.js`, { type: 'module' });
+/** The id of the scanner build on the server, never a cached answer. */
+async function buildId(): Promise<string> {
+  try {
+    const res = await fetch(`${BASE}/vision/pkg/build-id.txt`, { cache: 'no-store' });
+    if (res.ok) return (await res.text()).trim();
+  } catch {
+    // Offline: the worker falls back to whatever this browser has.
+  }
+  return 'dev';
+}
+
+function getWorker(): Promise<Worker> {
+  worker ??= buildId().then(startWorker);
+  return worker;
+}
+
+function startWorker(build: string): Worker {
+  const worker = new Worker(`${BASE}/vision/worker.js?v=${encodeURIComponent(build)}`, { type: 'module' });
   worker.onmessage = ({ data }) => {
     const p = pending.get(data.id);
     if (!p) return;
@@ -34,17 +49,21 @@ function getWorker(): Worker {
     const error = new Error(e.message || 'The reader could not start in this browser.');
     pending.forEach((p) => p.reject(error));
     pending.clear();
-    worker?.terminate();
-    worker = null;
+    worker.terminate();
+    stopWorker();
   };
   return worker;
+}
+
+function stopWorker() {
+  worker = null;
 }
 
 function call<T>(msg: Record<string, unknown>, onProgress?: (p: ScanPhase) => void, transfer: Transferable[] = []): Promise<T> {
   const id = ++seq;
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onProgress });
-    getWorker().postMessage({ id, ...msg }, transfer);
+    getWorker().then((w) => w.postMessage({ id, ...msg }, transfer), reject);
   });
 }
 
@@ -98,28 +117,26 @@ export const checksumPasses = (words: string[]) => call<boolean>({ type: 'checks
 
 /* ---------- adapting scanner output to what the demo shows ---------- */
 
+/** A word's picture, cut by the scanner from the photo it last read. */
+const cropWord = (quad: PageScan['words'][number]['quad']) => call<Uint8Array>({ type: 'crop', quad });
+
 /** Words in the scanner's suggested reading order, strays left out. */
-export function pageToWords(page: PageScan): WordRead[] {
+export async function pageToWords(page: PageScan): Promise<WordRead[]> {
   const order = page.initialOrder === 'numbers' ? page.numbered : page.initialOrder === 'rows' ? page.rows : page.columns;
-  return order
-    .map((i) => page.words[i])
-    .filter((w) => w && !w.stray)
-    .map((w) => {
-      const candidates = w.ranked.slice(0, 3).map((r) => ({ word: r.word, confidence: Math.round(r.probability * 100) }));
-      const selected = w.selected ?? candidates[0]?.word ?? '';
-      if (selected && !candidates.some((c) => c.word === selected)) {
-        const p = w.ranked.find((r) => r.word === selected)?.probability ?? 0;
-        candidates.push({ word: selected, confidence: Math.round(p * 100) });
-      }
+  const kept = order.map((i) => page.words[i]).filter((w) => w && !w.stray);
+  const crops = await Promise.all(kept.map((w) => cropWord(w.quad)));
+  return kept.map((w, i) => {
+      const selected = w.selected ?? '';
+      const candidates = [...(selected ? [{ word: selected, confidence: w.confidence }] : []), ...w.alternatives];
       return {
         ocr: w.raw ?? '',
         selected,
         candidates,
-        accepted: w.accepted,
+        accepted: !w.check,
         quad: w.quad,
-        cropUrl: URL.createObjectURL(new Blob([w.cropPng as BlobPart], { type: 'image/png' })),
+        cropUrl: URL.createObjectURL(new Blob([crops[i] as BlobPart], { type: 'image/png' })),
       };
-    });
+  });
 }
 
 /** A Penlock row is worth a second look when any cell is unread or below 90 %. */

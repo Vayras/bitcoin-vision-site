@@ -165,9 +165,9 @@ dependencies = [
  "bitcoin-vision-core",
  "image",
  "imageproc",
+ "miniz_oxide 0.8.9",
  "pdf-writer",
  "resvg",
- "svg2pdf",
 ]
 
 [[package]]
@@ -176,11 +176,11 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-vision-words",
  "console_error_panic_hook",
+ "image",
  "penlock",
  "penlock-scan",
  "serde",
  "serde-wasm-bindgen",
- "serde_bytes",
  "wasm-bindgen",
 ]
 
@@ -195,6 +195,7 @@ dependencies = [
  "bitcoin_hashes",
  "image",
  "imageproc",
+ "qrcode",
  "rand 0.9.5",
  "serde",
  "serde_json",
@@ -1227,6 +1228,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1507,16 +1514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_bytes"
-version = "0.11.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
-dependencies = [
- "serde",
- "serde_core",
-]
-
-[[package]]
 name = "serde_core"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1632,19 +1629,6 @@ checksum = "ad3df9b59e2eded8d825c7c4363ad339a20fb6bc0b9a4778560f518f59910b15"
 dependencies = [
  "hashbrown 0.16.1",
  "serde",
-]
-
-[[package]]
-name = "svg2pdf"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e50dc062439cc1a396181059c80932a6e6bd731b130e674c597c0c8874b6df22"
-dependencies = [
- "log",
- "miniz_oxide 0.8.9",
- "once_cell",
- "pdf-writer",
- "usvg",
 ]
 
 [[package]]

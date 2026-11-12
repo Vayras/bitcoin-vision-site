@@ -1,14 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SAMPLE_WORDS } from '@/lib/sample-data';
+import { SHARE_SAMPLES, WORD_SAMPLE, type Sample } from '@/lib/sample-data';
 import { checksumPasses, pageToWords, recoverShares, scanShares, scanWords } from '@/lib/vision/client';
 import { shareSample } from '@/lib/vision/share';
-import type { ScanPhase, ShareScan, WordRead } from '@/lib/vision/types';
+import type { PageScan, ScanPhase, ShareScan, WordRead } from '@/lib/vision/types';
 
 export type Mode = 'bip' | 'pen';
 export type Status = 'idle' | 'running' | 'done' | 'error';
-export type PenPick = 'right' | 'a1' | 'a2' | null;
 
 /** The training-sample question for the current photo. Asked once per photo. */
 export interface ShareAsk {
@@ -23,29 +22,26 @@ const ASK: ShareAsk = { status: 'ask', practice: false, id: null, error: null };
 export interface PgState {
   mode: Mode;
   status: Status;
-  /** 0–3 while the sample animates, 4 when done. */
-  stage: number;
-  /** What a real scan is doing. */
+  /** What a running scan is doing. */
   phase: ScanPhase | null;
-  /** Reading the sample page, or the person's own photo with the real model. */
+  /** Whose photo is being read: the site's practice sample, or the person's own. */
   source: 'sample' | 'photo';
   photo: string | null;
   photoName: string;
   /** Pixel size the boxes are drawn against. */
   photoSize: { w: number; h: number } | null;
   words: WordRead[];
+  /** The scanner's output for the photo, as returned. */
+  page: PageScan | null;
   /** The person's choice for a word, by index. */
   picks: Record<number, string>;
   open: number;
   tab: 'words' | 'json';
   mask: boolean;
   error: string | null;
-  /** Whether the chosen words pass the BIP39 checksum (real reads). */
+  /** Whether the words as shown pass the BIP39 checksum; null while checking. */
   checksum: boolean | null;
-  /* the sample Penlock walkthrough */
-  shares: number;
-  penPick: PenPick;
-  /* real Penlock reads */
+  /** Penlock shares read so far, one per share number. */
   penReads: ShareScan[];
   recovered: string[] | null;
   /** Strips found in the current photo (a sample covers only this photo). */
@@ -54,9 +50,9 @@ export interface PgState {
 }
 
 const IDLE: Omit<PgState, 'mode'> = {
-  status: 'idle', stage: 0, phase: null, source: 'sample', photo: null, photoName: '', photoSize: null,
-  words: SAMPLE_WORDS, picks: {}, open: -1, tab: 'words', mask: false, error: null, checksum: null,
-  shares: 0, penPick: null, penReads: [], recovered: null, photoStrips: [], share: ASK,
+  status: 'idle', phase: null, source: 'sample', photo: null, photoName: '', photoSize: null,
+  words: [], page: null, picks: {}, open: -1, tab: 'words', mask: false, error: null, checksum: null,
+  penReads: [], recovered: null, photoStrips: [], share: ASK,
 };
 
 export const isFlagged = (s: PgState, i: number) => !s.words[i].accepted && !s.picks[i];
@@ -64,88 +60,68 @@ export const unsureCount = (s: PgState) => s.words.filter((_, i) => isFlagged(s,
 export const finalWords = (s: PgState) => s.words.map((w, i) => s.picks[i] || w.selected);
 export const latestShare = (s: PgState) => s.penReads[s.penReads.length - 1];
 
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+export const sampleUrl = (sample: Sample) => `${BASE}${sample.path}`;
+
+/** The sample "Run sample" reads next: the page, or the share not yet read. */
+export function nextSample(s: PgState): Sample {
+  if (s.mode === 'bip') return WORD_SAMPLE;
+  const read = s.source === 'sample' ? s.penReads.length : 0;
+  return SHARE_SAMPLES[read % SHARE_SAMPLES.length];
+}
+
 const LOCATE_ERROR = 'I couldn’t find a Penlock strip. Fit the whole strip, with its black corner squares, flat and in focus.';
 
 export function usePlayground() {
   const [s, setS] = useState<PgState>({ mode: 'bip', ...IDLE });
-  const iv = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Bumped on every new run or reset, so a late result from an old scan is dropped. */
   const token = useRef(0);
   /** The person's original file, kept in memory only, for an opt-in share. */
   const photoFile = useRef<File | null>(null);
 
   const patch = useCallback((p: Partial<PgState>) => setS((prev) => ({ ...prev, ...p })), []);
-  const stop = useCallback(() => {
-    if (iv.current) clearInterval(iv.current);
-    iv.current = null;
-  }, []);
-  useEffect(() => stop, [stop]);
 
-  /** Free the photo and crop images of a real read. */
+  /** Free the photo and crop images of a read. */
   const release = (st: PgState) => {
     if (st.photo) URL.revokeObjectURL(st.photo);
-    if (st.words !== SAMPLE_WORDS) st.words.forEach((w) => w.cropUrl && URL.revokeObjectURL(w.cropUrl));
+    st.words.forEach((w) => w.cropUrl && URL.revokeObjectURL(w.cropUrl));
   };
 
   const reset = (extra: Partial<PgState> = {}) => {
     token.current++;
     photoFile.current = null;
-    stop();
     release(s);
     setS((p) => ({ ...p, ...IDLE, ...extra }));
   };
 
-  /** The design's scripted run over the sample page or share. */
-  const runSample = () => {
-    if (s.status === 'running') return;
-    const fromPhoto = s.source === 'photo';
-    if (fromPhoto) { release(s); photoFile.current = null; }
-    token.current++;
-    stop();
-    const pen = s.mode === 'pen';
-    const keepPen = pen && !fromPhoto;
-    setS((p) => ({
-      ...p,
-      ...(fromPhoto ? IDLE : {}),
-      status: 'running', stage: 0, open: -1, error: null,
-      picks: {}, shares: keepPen ? p.shares : 0, penPick: keepPen && p.shares >= 1 ? p.penPick : null,
-    }));
-    let stage = 0;
-    iv.current = setInterval(() => {
-      if (stage >= 3) {
-        stop();
-        setS((p) => ({ ...p, status: 'done', stage: 4, shares: pen ? Math.min(p.shares + 1, 2) : 0, open: pen ? (p.penPick ? -1 : 6) : 5 }));
-      } else {
-        stage += 1;
-        patch({ stage });
-      }
-    }, 480);
-  };
-
-  /** The real model on the person's own photo. */
-  const scanPhoto = async (file: File) => {
-    stop();
+  /** The scanner on one photo: the site's sample or the person's own. */
+  const scan = async (file: File, source: PgState['source']) => {
     const mine = ++token.current;
     const current = () => token.current === mine;
     const pen = s.mode === 'pen';
-    const keep = pen && s.source === 'photo' ? s.penReads : [];
-    photoFile.current = file;
+    const keep = pen && s.source === source ? s.penReads : [];
+    // Only the person's own photo can be offered for training.
+    photoFile.current = source === 'photo' ? file : null;
     if (s.photo) URL.revokeObjectURL(s.photo);
-    if (!pen && s.words !== SAMPLE_WORDS) s.words.forEach((w) => w.cropUrl && URL.revokeObjectURL(w.cropUrl));
+    s.words.forEach((w) => w.cropUrl && URL.revokeObjectURL(w.cropUrl));
     patch({
-      source: 'photo', photo: URL.createObjectURL(file), photoName: file.name || 'your-photo', photoSize: null,
-      status: 'running', stage: 1, phase: 'reading', error: null, open: -1, picks: {}, checksum: null, tab: 'words',
-      words: SAMPLE_WORDS, penReads: keep, recovered: null, shares: 0, penPick: null, photoStrips: [], share: ASK,
+      source, photo: URL.createObjectURL(file), photoName: file.name || 'your-photo', photoSize: null,
+      status: 'running', phase: 'reading', error: null, open: -1, picks: {}, checksum: null, tab: 'words',
+      words: [], page: null, penReads: keep, recovered: null, photoStrips: [], share: ASK,
     });
-    const onPhase = (phase: ScanPhase) => { if (current()) patch({ phase, stage: phase === 'loading' ? 0 : 1 }); };
+    const onPhase = (phase: ScanPhase) => { if (current()) patch({ phase }); };
 
     try {
       if (!pen) {
         const page = await scanWords(file, onPhase);
         if (!current()) return;
-        const words = pageToWords(page);
+        const words = await pageToWords(page);
+        if (!current()) {
+          words.forEach((w) => w.cropUrl && URL.revokeObjectURL(w.cropUrl));
+          return;
+        }
         if (!words.length) throw new Error('I couldn’t find handwritten words. Try a closer, well-lit photo with the whole page in view.');
-        patch({ words, photoSize: { w: page.width, h: page.height }, status: 'done', stage: 4, phase: null, open: words.findIndex((w) => !w.accepted) });
+        patch({ words, page, photoSize: { w: page.width, h: page.height }, status: 'done', phase: null, open: words.findIndex((w) => !w.accepted) });
         return;
       }
 
@@ -158,7 +134,7 @@ export function usePlayground() {
       const byIndex = new Map(keep.map((r) => [r.index, r]));
       strips.forEach((r) => byIndex.set(r.index, r));
       const penReads = [...byIndex.values()];
-      patch({ penReads, photoStrips: strips, status: 'done', stage: 4, phase: null });
+      patch({ penReads, photoStrips: strips, status: 'done', phase: null });
       if (penReads.length >= 2) {
         const [a, b] = penReads.slice(-2);
         try {
@@ -176,16 +152,28 @@ export function usePlayground() {
     }
   };
 
-  // Real BIP39 reads: check the phrase once every word is settled.
-  const live = s.source === 'photo';
+  const runSample = async () => {
+    if (s.status === 'running') return;
+    const sample = nextSample(s);
+    const mine = ++token.current;
+    try {
+      const response = await fetch(sampleUrl(sample));
+      if (!response.ok) throw new Error(`The sample photo did not load (${response.status}).`);
+      const blob = await response.blob();
+      if (token.current === mine) await scan(new File([blob], sample.name, { type: blob.type }), 'sample');
+    } catch (e) {
+      if (token.current === mine) patch({ status: 'error', phase: null, error: (e as Error).message });
+    }
+  };
+
+  // Every word has a pick, sure or not, so the phrase as shown can always be checked.
   useEffect(() => {
-    if (!live || s.mode !== 'bip' || s.status !== 'done') return;
-    if (unsureCount(s) > 0) { patch({ checksum: null }); return; }
+    if (s.mode !== 'bip' || s.status !== 'done') return;
     let alive = true;
     checksumPasses(finalWords(s)).then((ok) => { if (alive) patch({ checksum: ok }); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, s.mode, s.status, s.words, s.picks, patch]);
+  }, [s.mode, s.status, s.words, s.picks, patch]);
 
   /** Upload the current photo and its labels, only after the person said yes. */
   const sendSample = async () => {
@@ -210,11 +198,10 @@ export function usePlayground() {
   const actions = {
     setMode: (mode: Mode) => { if (mode !== s.mode) reset({ mode }); },
     run: runSample,
-    scanPhoto,
+    scanPhoto: (file: File) => scan(file, 'photo'),
     forget: () => reset(),
     toggleRow: (i: number) => patch({ open: s.open === i ? -1 : i }),
     pickWord: (i: number, word: string) => setS((p) => ({ ...p, picks: { ...p.picks, [i]: word }, open: -1 })),
-    pickPen: (v: PenPick) => patch({ penPick: v, open: -1 }),
     setTab: (tab: PgState['tab']) => patch({ tab }),
     toggleMask: () => setS((p) => ({ ...p, mask: !p.mask })),
     setPractice: (practice: boolean) => setS((p) => ({ ...p, share: { ...p.share, practice } })),

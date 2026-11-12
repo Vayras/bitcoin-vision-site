@@ -3,16 +3,23 @@
 // model and the .wasm file from this same site (then they come from the cache).
 //
 // Messages in:  { id, type: 'scanWords' | 'scanShares', photo: ArrayBuffer }
+//               { id, type: 'crop', quad: number[][] }  (a word of the last scanWords)
 //               { id, type: 'recover', a, b }          (share ids from scanShares)
 //               { id, type: 'checksum', words: string[] }
 // Messages out: { id, progress: 'loading' | 'reading' }
 //               { id, result } | { id, error }
 
-import init, { WordScanner, ShareScanner, checksumPasses, recoverShares } from './pkg/bitcoin_vision_wasm.js';
-
-// Bump when the models or the .wasm change, so browsers drop the old copies.
-const CACHE = 'bitcoin-vision-v1';
+// The page starts this worker as worker.js?v=<build id>. Everything is loaded
+// and cached under that id, so one build's JS glue never meets another
+// build's cached .wasm (their import names differ and the module won't start).
+const BUILD = new URL(self.location.href).searchParams.get('v') || 'dev';
+const CACHE = `bitcoin-vision-${BUILD}`;
 const here = (path) => new URL(path, import.meta.url).href;
+const glue = import(`./pkg/bitcoin_vision_wasm.js?v=${BUILD}`);
+
+caches.keys()
+  .then((names) => Promise.all(names.filter((n) => n.startsWith('bitcoin-vision-') && n !== CACHE).map((n) => caches.delete(n))))
+  .catch(() => {});
 
 async function cachedFetch(path) {
   const url = here(path);
@@ -38,15 +45,17 @@ let shares = null;
 const readings = new Map();
 let nextReading = 1;
 
+/** The started WebAssembly module's exports. */
 function boot() {
-  booted ??= cachedFetch('./pkg/bitcoin_vision_wasm_bg.wasm').then((res) => init({ module_or_path: res }));
+  booted ??= Promise.all([glue, cachedFetch('./pkg/bitcoin_vision_wasm_bg.wasm')])
+    .then(([module, res]) => module.default({ module_or_path: res }).then(() => module));
   return booted;
 }
 
 async function wordScanner(progress) {
   if (words) return words;
   progress('loading');
-  const [, detector, classifier, calibration, recogniser, dictionary] = await Promise.all([
+  const [{ WordScanner }, detector, classifier, calibration, recogniser, dictionary] = await Promise.all([
     boot(),
     bytes('./models/word-detector.onnx'),
     bytes('./models/word-reference.onnx'),
@@ -61,7 +70,7 @@ async function wordScanner(progress) {
 async function shareScanner(progress) {
   if (shares) return shares;
   progress('loading');
-  const [, cells] = await Promise.all([boot(), bytes('./models/cell-reference.onnx')]);
+  const [{ ShareScanner }, cells] = await Promise.all([boot(), bytes('./models/cell-reference.onnx')]);
   shares = new ShareScanner(cells);
   return shares;
 }
@@ -75,6 +84,9 @@ self.onmessage = async ({ data }) => {
       const scanner = await wordScanner(progress);
       progress('reading');
       result = scanner.scan(new Uint8Array(data.photo));
+    } else if (type === 'crop') {
+      if (!words) throw new Error('Scan a photo first.');
+      result = words.crop(new Float32Array(data.quad.flat()));
     } else if (type === 'scanShares') {
       const scanner = await shareScanner(progress);
       progress('reading');
@@ -87,11 +99,9 @@ self.onmessage = async ({ data }) => {
       const a = readings.get(data.a);
       const b = readings.get(data.b);
       if (!a || !b) throw new Error('Those shares are no longer loaded. Scan them again.');
-      await boot();
-      result = recoverShares(a, b);
+      result = (await boot()).recoverShares(a, b);
     } else if (type === 'checksum') {
-      await boot();
-      result = checksumPasses(data.words);
+      result = (await boot()).checksumPasses(data.words);
     } else {
       throw new Error(`Unknown request ${type}`);
     }

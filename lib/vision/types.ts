@@ -4,22 +4,16 @@
  * The raw scanner output types mirror wasm/src/lib.rs (serialised with camelCase).
  */
 
-export interface Candidate {
-  /** A word from the official 2048-word BIP-39 list. */
-  word: string;
-  /** 0–100 */
-  confidence: number;
-}
-
 /** One word as the demo shows it, from the sample page or from the real model. */
 export interface WordRead {
   /** Exactly what was read off the paper, e.g. "absert". */
   ocr: string;
-  /** The word to show first. */
+  /** The scanner's pick: the word to show, also when `accepted` is false. */
   selected: string;
-  /** Best list matches, highest confidence first. */
-  candidates: Candidate[];
-  /** False when the model wants the person to confirm this word. */
+  /** The pick first, then the other list words, likeliest first, each with
+   * the scanner's chance (0–1) that it is the word written. */
+  candidates: { word: string; confidence: number }[];
+  /** False when the scanner asks the person to confirm this word. */
   accepted: boolean;
   /** Object URL of the crop the model read (real scans only). */
   cropUrl?: string;
@@ -33,13 +27,16 @@ export type Point = [number, number];
 
 export interface ScannedWord {
   quad: [Point, Point, Point, Point];
-  ranked: { word: string; probability: number }[];
-  accepted: boolean;
   selected: string | null;
+  /** The chance `selected` is right. */
+  confidence: number;
+  /** The scanner asks the person to confirm `selected`. */
+  check: boolean;
+  /** Other words to offer, likeliest first, never `selected`. */
+  alternatives: { word: string; confidence: number }[];
   raw: string | null;
   stray: boolean;
   number: number | null;
-  cropPng: Uint8Array;
 }
 
 export interface PageScan {

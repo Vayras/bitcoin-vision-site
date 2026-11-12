@@ -8,7 +8,7 @@
 set -euo pipefail
 
 UPSTREAM_URL="https://github.com/penlock-io/bitcoin-vision.git"
-UPSTREAM_REV="29dcf378623ac9a047d6e30790f20789903ae669"
+UPSTREAM_REV="219cc1381f42d8fde5703fdc3f24993ea0bd47a2"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UP="$ROOT/wasm/upstream"
@@ -49,6 +49,11 @@ if command -v wasm-opt >/dev/null 2>&1; then
     --enable-sign-ext --enable-mutable-globals \
     "$OUT/pkg/bitcoin_vision_wasm_bg.wasm" -o "$OUT/pkg/bitcoin_vision_wasm_bg.wasm"
 fi
+
+# A browser must never pair this build's JS glue with another build's cached
+# .wasm: their import names differ and the module will not start. The page
+# reads this id and loads the worker, the glue and the cache under it.
+shasum -a 256 "$OUT/pkg/bitcoin_vision_wasm_bg.wasm" "$OUT/pkg/bitcoin_vision_wasm.js" | shasum -a 256 | cut -c1-12 > "$OUT/pkg/build-id.txt"
 
 # 4. Models.
 mkdir -p "$OUT/models"

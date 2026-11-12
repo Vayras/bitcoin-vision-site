@@ -1,5 +1,5 @@
 diff --git a/words/Cargo.toml b/words/Cargo.toml
-index a69a4ea..ebe8a34 100644
+index 9aa7d35..7de349b 100644
 --- a/words/Cargo.toml
 +++ b/words/Cargo.toml
 @@ -19,6 +19,8 @@ imageproc = { version = "0.27", default-features = false }
@@ -9,8 +9,8 @@ index a69a4ea..ebe8a34 100644
 +# std::time::Instant panics in browser WebAssembly; web-time is std on native.
 +web-time = "1"
  tract-onnx = { version = "0.23", optional = true }
- 
- [dev-dependencies]
+ # The phrase card's back carries a QR code to the repository; only printing
+ # draws it.
 diff --git a/words/src/recogniser_shape.rs b/words/src/recogniser_shape.rs
 index 7e78abd..e305d05 100644
 --- a/words/src/recogniser_shape.rs

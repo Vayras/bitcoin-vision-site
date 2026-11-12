@@ -6,6 +6,9 @@
 //! back to one worker on its own). Load it in a Web Worker so a scan does not
 //! block the page.
 
+use std::cell::RefCell;
+
+use bitcoin_vision_words::Quad;
 use bitcoin_vision_words::review::ReviewNumbering;
 use penlock::soft::combine;
 use penlock::soft::search::{Bip39Checksum, Filter, Floor, Outcome, search, slots};
@@ -29,7 +32,7 @@ fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
         .map_err(err)
 }
 
-fn quad<T: Into<f64> + Copy>(q: &[(T, T); 4]) -> [[f64; 2]; 4] {
+fn corners<T: Into<f64> + Copy>(q: &[(T, T); 4]) -> [[f64; 2]; 4] {
     q.map(|(x, y)| [x.into(), y.into()])
 }
 
@@ -37,9 +40,10 @@ fn quad<T: Into<f64> + Copy>(q: &[(T, T); 4]) -> [[f64; 2]; 4] {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Ranked {
+struct Alternative {
     word: &'static str,
-    probability: f32,
+    /// The chance this word is the one written.
+    confidence: f32,
 }
 
 #[derive(Serialize)]
@@ -47,21 +51,20 @@ struct Ranked {
 struct WordOut {
     /// Corners in photo pixels, clockwise from top left.
     quad: [[f64; 2]; 4],
-    /// The model's most probable list words, most probable first.
-    ranked: Vec<Ranked>,
-    /// Whether the calibration accepts the pick; otherwise ask the person.
-    accepted: bool,
-    /// The word to show first.
+    /// The word the scanner picked.
     selected: Option<&'static str>,
+    /// The chance `selected` is right.
+    confidence: f32,
+    /// Whether the person should confirm `selected`.
+    check: bool,
+    /// Other words to offer, likeliest first, never `selected`.
+    alternatives: Vec<Alternative>,
     /// The text recogniser's literal read of the crop.
     raw: Option<String>,
     /// Not a word: left out of every reading order.
     stray: bool,
     /// The item number written beside it, when the page is numbered.
     number: Option<u32>,
-    /// The exact crop the models read, as PNG.
-    #[serde(with = "serde_bytes")]
-    crop_png: Vec<u8>,
 }
 
 #[derive(Serialize)]
@@ -92,6 +95,8 @@ struct PageOut {
 #[wasm_bindgen]
 pub struct WordScanner {
     inner: bitcoin_vision_words::Scanner,
+    /// The last photo scanned, which that scan's quads are in.
+    photo: RefCell<Option<image::RgbImage>>,
 }
 
 #[wasm_bindgen]
@@ -113,16 +118,18 @@ impl WordScanner {
             dictionary,
         })
         .map_err(err)?;
-        Ok(WordScanner { inner })
+        Ok(WordScanner { inner, photo: RefCell::new(None) })
     }
 
     /// Reads every word in one photo (JPEG, PNG or WebP bytes; EXIF honoured).
     pub fn scan(&self, photo: &[u8]) -> Result<JsValue, JsError> {
+        let photo = bitcoin_vision_words::decode_image(photo, None).map_err(err)?;
         let result = self
             .inner
-            .scan(photo, bitcoin_vision_words::ScanOptions::default())
+            .scan_rgb(&photo, bitcoin_vision_words::ScanOptions::default())
             .map_err(err)?;
-        let page = result.review().map_err(err)?;
+        *self.photo.borrow_mut() = Some(photo);
+        let page = result.review();
         let out = PageOut {
             layout: match page.found {
                 bitcoin_vision_words::Found::Sheet => "sheet",
@@ -134,18 +141,18 @@ impl WordScanner {
                 .words
                 .iter()
                 .map(|w| WordOut {
-                    quad: quad(&w.quad),
-                    ranked: w
-                        .ranked
-                        .iter()
-                        .map(|&(word, probability)| Ranked { word, probability })
-                        .collect(),
-                    accepted: w.accepted,
+                    quad: corners(&w.quad.0),
                     selected: w.selected,
+                    confidence: w.confidence,
+                    check: w.check,
+                    alternatives: w
+                        .alternatives
+                        .iter()
+                        .map(|&(word, confidence)| Alternative { word, confidence })
+                        .collect(),
                     raw: w.raw.clone(),
                     stray: w.stray,
                     number: w.number,
-                    crop_png: w.crop_png.clone(),
                 })
                 .collect(),
             columns: page.columns,
@@ -164,6 +171,22 @@ impl WordScanner {
             },
         };
         to_js(&out)
+    }
+
+    /// The picture of a word from the last scan, as PNG: its `quad`, eight
+    /// numbers, cut level from that photo. For a person to check a reading.
+    pub fn crop(&self, quad: &[f32]) -> Result<Vec<u8>, JsError> {
+        let &[a, b, c, d, e, f, g, h] = quad else {
+            return Err(JsError::new("a quad is four corners, eight numbers"));
+        };
+        let photo = self.photo.borrow();
+        let photo = photo.as_ref().ok_or_else(|| JsError::new("no photo has been scanned"))?;
+        let mut png = Vec::new();
+        Quad([(a, b), (c, d), (e, f), (g, h)])
+            .crop(photo)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(err)?;
+        Ok(png)
     }
 }
 
@@ -290,7 +313,7 @@ impl ShareReading {
                     .collect()
             })
             .collect();
-        to_js(&ShareOut { kind, index, quad: quad(&s.quad()), rows })
+        to_js(&ShareOut { kind, index, quad: corners(&s.quad()), rows })
     }
 }
 
