@@ -119,13 +119,13 @@ Tell users to keep the three shares in separate places. Two shares stored togeth
 
 ## Hardware wallet integration
 
-bitcoin-vision fits inside a signing device because it is small and fully offline: the whole model set is about 24.7 MB and nothing leaves the device. A Penlock app for Passport Prime uses it to read shares; so far it has run only on the Passport Prime simulator, not on real hardware.
+bitcoin-vision fits inside a signing device because it is small and fully offline: reading Penlock shares needs one 1.6 MB model, reading BIP39 phrases needs three models totalling 24.7 MB, and nothing leaves the device. A Penlock app for Passport Prime uses it to read shares; so far it has run only on the Passport Prime simulator, not on real hardware.
 
 What to plan for:
 
 | Area | What to decide |
 | --- | --- |
-| Storage | About 24.7 MB of ONNX models. Ship them in the app bundle, or load them with `Scanner::new(ModelBytes { .. })` from a separate signed blob. |
+| Storage | 1.6 MB of ONNX models for Penlock only (`cell-reference.onnx`), 24.7 MB for BIP39 (`word-detector.onnx` 4.7 MB, `text-recogniser.onnx` 7.7 MB, `word-reference.onnx` 12.3 MB). Ship them in the app bundle, or load them with `Scanner::new(ModelBytes { .. })` from a separate signed blob. |
 | Memory | Keep one `Scanner` alive per session instead of reloading models per photo. Measure peak use on your target hardware. |
 | Compute | Measure scan time on your hardware and show progress while it runs. |
 | Camera | Ask for the whole page or strip, flat and evenly lit. Low contrast and odd layouts are the main causes of misreads. |

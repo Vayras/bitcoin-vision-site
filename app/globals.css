@@ -289,12 +289,13 @@ div.wt-btn { cursor: default; }
 
 /* ---------------------------------------------------------------- model card */
 .mtable { overflow: hidden; }
-.mrow { display: grid; grid-template-columns: 1.4fr 0.7fr 1.6fr 1.2fr; gap: 16px; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.mrow { display: grid; grid-template-columns: 1.4fr 0.7fr 1.6fr 1.3fr 0.6fr; gap: 16px; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .mrow:last-child { border-bottom: 0; }
 .mrow.is-head { padding-top: 12px; padding-bottom: 12px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); background: var(--soft); }
 .m-file { font-family: var(--mono); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .m-pipe { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--line2); }
 .m-job { color: var(--muted); }
+.m-size { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 24px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--line); }
 .stat { padding: 24px; background: var(--panel); }
 .stat b { display: block; font-size: 40px; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
